@@ -1,0 +1,10 @@
+model_name: "mistralai/Mamba-Codestral-7B-v0.1"
+hardware: "Atlas A2 Series"
+tasks:
+- name: "gsm8k"
+  metrics:
+  - name: "exact_match,strict-match"
+    value: 0.0  # TODO: fill in after Ascend verification
+  - name: "exact_match,flexible-extract"
+    value: 0.0  # TODO: fill in after Ascend verification
+num_fewshot: 5
