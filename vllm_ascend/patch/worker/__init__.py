@@ -21,7 +21,16 @@ from vllm_ascend.utils import is_310p
 
 if HAS_TRITON:
     import vllm_ascend.patch.worker.patch_triton
+    import vllm_ascend.patch.worker.patch_mamba_ssd  # noqa
     import vllm_ascend.patch.worker.patch_v2.patch_triton  # noqa
+else:
+    import vllm.model_executor.layers.mamba.ops.causal_conv1d
+
+    from vllm_ascend._310p.ops.causal_conv1d import causal_conv1d_fn as _ascend_causal_conv1d_fn
+    from vllm_ascend._310p.ops.causal_conv1d import causal_conv1d_update as _ascend_causal_conv1d_update
+
+    vllm.model_executor.layers.mamba.ops.causal_conv1d.causal_conv1d_fn = _ascend_causal_conv1d_fn
+    vllm.model_executor.layers.mamba.ops.causal_conv1d.causal_conv1d_update = _ascend_causal_conv1d_update
 
 
 # isort: off
