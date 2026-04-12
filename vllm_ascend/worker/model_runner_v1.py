@@ -2871,10 +2871,16 @@ class NPUModelRunner(GPUModelRunner):
                     use_mamba = True
                 if isinstance(layer_kv_cache_spec[layer_name], AttentionSpec):
                     use_attn = True
-            self.hybrid_with_attn_and_mamba = self.hybrid_with_attn_and_mamba or (use_mamba and use_attn)
+            self.hybrid_with_attn_and_mamba = (
+                self.hybrid_with_attn_and_mamba or (use_mamba and use_attn)
+            )
             for idx in range(len(kv_cache_tensor.shared_by)):
                 layer_name = kv_cache_tensor.shared_by[idx]
-                if isinstance(layer_kv_cache_spec.get(layer_name), MambaSpec) and layer_name not in kv_cache_raw_tensors:
+                is_unallocated_mamba = (
+                    isinstance(layer_kv_cache_spec.get(layer_name), MambaSpec)
+                    and layer_name not in kv_cache_raw_tensors
+                )
+                if is_unallocated_mamba:
                     # Pure Mamba models do not use attn-style layer names, so they need
                     # an explicit branch instead of relying on string matching.
                     if self.vllm_config.kv_transfer_config is None:

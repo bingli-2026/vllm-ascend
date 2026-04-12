@@ -20,8 +20,8 @@ from vllm.triton_utils import HAS_TRITON
 from vllm_ascend.utils import is_310p
 
 if HAS_TRITON:
-    import vllm_ascend.patch.worker.patch_triton
     import vllm_ascend.patch.worker.patch_mamba_ssd  # noqa
+    import vllm_ascend.patch.worker.patch_triton
     import vllm_ascend.patch.worker.patch_v2.patch_triton  # noqa
 else:
     import vllm.model_executor.layers.mamba.ops.causal_conv1d

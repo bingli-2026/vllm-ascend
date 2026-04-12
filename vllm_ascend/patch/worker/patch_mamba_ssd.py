@@ -1,7 +1,6 @@
 import inspect
 
 import torch
-
 import vllm.model_executor.layers.mamba.ops.ssd_chunk_scan as _chunk_scan
 import vllm.model_executor.layers.mamba.ops.ssd_combined as _ssd_combined
 import vllm.model_executor.layers.mamba.ops.ssd_state_passing as _state_passing
