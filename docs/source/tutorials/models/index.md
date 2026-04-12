@@ -34,4 +34,5 @@ Kimi-K2-Thinking.md
 Kimi-K2.5.md
 PaddleOCR-VL.md
 MiniMax-M2.5.md
+Mamba-Codestral-7B-v0.1.md
 :::

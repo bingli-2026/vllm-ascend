@@ -168,7 +168,7 @@ class BlockTable:
         query_start_loc_np = query_start_loc.cpu().numpy()
         positions_np = positions.cpu().numpy()
         slot_mapping_np = self.slot_mapping.np
-        slot_mapping_np[: self.max_num_batched_tokens] = PAD_SLOT_ID
+        slot_mapping_np[:num_tokens] = PAD_SLOT_ID
 
         for req_idx in range(num_reqs):
             start = int(query_start_loc_np[req_idx])

@@ -1,8 +1,13 @@
+import inspect
+
 import torch
 
 import vllm.model_executor.layers.mamba.ops.ssd_chunk_scan as _chunk_scan
 import vllm.model_executor.layers.mamba.ops.ssd_combined as _ssd_combined
 import vllm.model_executor.layers.mamba.ops.ssd_state_passing as _state_passing
+
+_ORIGINAL_STATE_PASSING_FWD = _state_passing._state_passing_fwd
+_STATE_PASSING_PARAMS = set(inspect.signature(_ORIGINAL_STATE_PASSING_FWD).parameters)
 
 
 def _chunk_scan_fwd(
@@ -123,6 +128,42 @@ def _chunk_scan_fwd(
 def _state_passing_fwd(
     states,
     dA_cumsum,
+    *args,
+    initial_states=None,
+    out_dtype=None,
+    **kwargs,
+):
+    if "last_chunk_indices" in _STATE_PASSING_PARAMS:
+        last_chunk_indices = kwargs.pop("last_chunk_indices", None)
+        if last_chunk_indices is None:
+            last_chunk_indices = args[0]
+        return _state_passing_fwd_last_chunk_indices(
+            states,
+            dA_cumsum,
+            last_chunk_indices,
+            initial_states=initial_states,
+            out_dtype=out_dtype,
+        )
+
+    cu_chunk_seqlens = kwargs.pop("cu_chunk_seqlens", None)
+    seq_idx = kwargs.pop("seq_idx", None)
+    if len(args) >= 1 and cu_chunk_seqlens is None:
+        cu_chunk_seqlens = args[0]
+    if len(args) >= 2 and seq_idx is None:
+        seq_idx = args[1]
+    return _state_passing_fwd_seq_idx(
+        states,
+        dA_cumsum,
+        cu_chunk_seqlens,
+        seq_idx,
+        initial_states=initial_states,
+        out_dtype=out_dtype,
+    )
+
+
+def _state_passing_fwd_last_chunk_indices(
+    states,
+    dA_cumsum,
     last_chunk_indices,
     initial_states=None,
     out_dtype=None,
@@ -145,7 +186,7 @@ def _state_passing_fwd(
         initial_states_ptr = states.new_empty((1, 1, 1))
 
     grid = lambda META: (_state_passing.triton.cdiv(dim, META["BLOCK_SIZE"]), batch, nheads)
-    with torch.accelerator.device_index(states.device.index):
+    with torch.accelerator.device_index(states.device):
         _state_passing._state_passing_fwd_kernel[grid](
             states_ptr=states,
             out_ptr=out,
@@ -166,6 +207,63 @@ def _state_passing_fwd(
             stride_initstates_batch=initial_states_strides[0],
             stride_initstates_head=initial_states_strides[1],
             stride_initstates_dim=initial_states_strides[2],
+            HAS_INITSTATES=initial_states is not None,
+        )
+    return out
+
+
+def _state_passing_fwd_seq_idx(
+    states,
+    dA_cumsum,
+    cu_chunk_seqlens,
+    seq_idx,
+    initial_states=None,
+    out_dtype=None,
+):
+    nchunks, nheads, dim = states.shape
+    chunk_size = dA_cumsum.shape[-1]
+    assert dA_cumsum.shape == (nheads, nchunks, chunk_size)
+    assert seq_idx is not None, "this implementation requires seq_idx"
+    seqlen = seq_idx.shape[-1]
+    out_dtype = states.dtype if out_dtype is None else out_dtype
+    out = torch.empty((nchunks, nheads, dim), device=states.device, dtype=out_dtype)
+
+    initial_states_ptr = initial_states
+    initial_states_strides = (
+        (initial_states.stride(0), initial_states.stride(1), initial_states.stride(2))
+        if initial_states is not None
+        else (0, 0, 0)
+    )
+    if initial_states_ptr is None:
+        # Triton-Ascend still inspects pointer types in constexpr-false branches.
+        initial_states_ptr = states.new_empty((1, 1, 1))
+
+    grid = lambda META: (_state_passing.triton.cdiv(dim, META["BLOCK_SIZE"]), nheads)
+    with torch.accelerator.device_index(states.device):
+        _state_passing._state_passing_fwd_kernel[grid](
+            states_ptr=states,
+            out_ptr=out,
+            dA_cs_ptr=dA_cumsum,
+            initstates_ptr=initial_states_ptr,
+            seq_idx_ptr=seq_idx,
+            cu_chunk_seqlens_ptr=cu_chunk_seqlens,
+            dim=dim,
+            nchunks=nchunks,
+            seqlen=seqlen,
+            chunk_size=chunk_size,
+            stride_states_chunk=states.stride(0),
+            stride_states_head=states.stride(1),
+            stride_states_dim=states.stride(2),
+            stride_out_chunk=out.stride(0),
+            stride_out_head=out.stride(1),
+            stride_out_dim=out.stride(2),
+            stride_dA_cs_head=dA_cumsum.stride(0),
+            stride_dA_cs_chunk=dA_cumsum.stride(1),
+            stride_dA_cs_csize=dA_cumsum.stride(2),
+            stride_initstates_batch=initial_states_strides[0],
+            stride_initstates_head=initial_states_strides[1],
+            stride_initstates_dim=initial_states_strides[2],
+            stride_seq_idx_chunk=seq_idx.stride(0),
             HAS_INITSTATES=initial_states is not None,
         )
     return out
