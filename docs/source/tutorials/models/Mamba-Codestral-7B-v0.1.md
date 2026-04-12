@@ -104,15 +104,16 @@ curl http://localhost:8000/v1/completions \
 Run the GSM8K benchmark using the vllm-ascend e2e test framework:
 
 ```shell
-python tests/e2e/models/test_accuracy.py \
-  --config tests/e2e/models/configs/Mamba-Codestral-7B-v0.1.yaml
+python -m pytest tests/e2e/models/test_lm_eval_correctness.py \
+  --config tests/e2e/models/configs/Mamba-Codestral-7B-v0.1.yaml \
+  --tp-size 1 \
+  --report-dir reports \
+  -s
 ```
 
 Expected results on Atlas A2 Series (1 card):
 
 | Task  | Metric                       | Value  |
 |-------|------------------------------|--------|
-| gsm8k | exact_match, strict-match    | TODO   |
-| gsm8k | exact_match, flexible-extract| TODO   |
-
-> **Note:** Accuracy values will be updated after Ascend verification is complete.
+| gsm8k | exact_match, strict-match    | 0.1243 |
+| gsm8k | exact_match, flexible-extract| 0.1259 |
